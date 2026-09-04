@@ -96,7 +96,7 @@ Open your browser to **[http://127.0.0.1:8000](http://127.0.0.1:8000)** (Chrome 
 
 ### Deploy to Vercel (One-Click Serverless)
 
-Jarvis is already deplyed on Vercel.
+Jarvis is already deployed on Vercel.
 
 Live Link- https://jarvis-livid-psi.vercel.app/
   ```
