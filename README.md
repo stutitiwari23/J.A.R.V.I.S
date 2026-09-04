@@ -1,101 +1,211 @@
-# J.A.R.V.I.S — Futuristic Personal AI Assistant
+# ✦ J.A.R.V.I.S — Futuristic Personal AI Assistant
 
-> **Dark HUD Interface • Animated AI Orb • Voice Interaction • Minimal Backend**
+<div align="center">
 
-JARVIS is a futuristic, personal AI assistant inspired by sci-fi HUD computer interfaces. It features an interactive animated central AI Orb, full speech-to-text (STT) and voice synthesis (TTS), local AI intelligence, and safe everyday tools.
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![Google Gemini](https://img.shields.io/badge/Google%20Gemini-3.1%20Flash%20Lite-8E75B2?style=for-the-badge&logo=google&logoColor=white)
+![Vercel](https://img.shields.io/badge/Vercel-Ready-000000?style=for-the-badge&logo=vercel&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
----
+**A high-performance, sci-fi HUD personal AI assistant powered by Google Gemini, real-time voice streaming, and local search history management.**
 
-## ⚡ Key Capabilities
+[Key Features](#-key-features) • [Quick Start](#-quick-start) • [Vercel Deployment](#-vercel-deployment) • [Search History](#-local-search-history) • [Architecture](#-project-structure)
 
-- **🎙️ Voice-First Interaction**: Click the central AI Orb or press `Space` to speak. Jarvis responds with voice and text.
-- **🔮 Animated Central AI Orb**: Dynamic visual states (**READY**, **LISTENING**, **THINKING**, **SPEAKING**, **ERROR**) with concentric holographic HUD rings and particle mesh background.
-- **🧮 Safe Math Engine**: AST-based math evaluation (percentages, unit conversions, functions). No `eval()`.
-- **🌐 Live Web Search**: Fast internet queries via Tavily or DuckDuckGo.
-- **⚡ System Diagnostics**: Live CPU, RAM, OS, and Python runtime metrics.
-- **📁 Workspace Files**: Read, create, append, and list files safely confined within the workspace.
-- **🔒 Protected Shell**: Executes terminal commands with automatic confirmation gating for destructive operations (`rm`, `del`, `format`, `shutdown`).
-- **📧 Gmail & 📅 Calendar**: Unread email checks, schedule lookups, and message dispatch with safety confirmation.
-- **🧠 SQLite Memory**: Remembers user preferences (`user_name`, `preferred_language`, custom notes).
+</div>
 
 ---
 
-## 🚀 Quick Start (Local)
+## ⚡ Overview
 
-### 1. Web Dashboard (Live UI)
-```powershell
-.\.python\python.exe main.py
-```
-> Open **[http://127.0.0.1:8000](http://127.0.0.1:8000)** in your browser (Google Chrome or Edge recommended for voice STT/TTS).
-
-### 2. Terminal REPL (Rich CLI)
-```powershell
-.\.python\python.exe main.py --cli
-```
-
-### 3. Run Self-Verification Tests (25 Tests)
-```powershell
-.\.python\python.exe test_jarvis.py
-```
+**J.A.R.V.I.S** (*Just A Rather Very Intelligent System*) is a personal AI assistant inspired by Tony Stark's iconic AI. It blends a futuristic holographic HUD interface with state-of-the-art **Google Gemini** generative intelligence, ultra-low latency response times, real-time Web Speech recognition, and complete local privacy controls.
 
 ---
 
-## ☁️ Deployment Guide
+## 🌟 Key Features
 
-### Option A: 1-Click Cloud Deployment (Render / Railway / Koyeb)
+### 🧠 Ultra-Fast Google Gemini Brain
+- Powered by **`gemini-3.1-flash-lite`** for rapid token generation (~2.4s initial response time).
+- Intelligent fallback cascade across `gemini-flash-lite-latest`, `gemini-3.5-flash-lite`, and `gemini-3.6-flash`.
+- **Persistent Connection Pooling**: Caches the official `google-genai` client to eliminate repeated TLS handshake delays.
+- Dynamic Google Search grounding for live/current real-world information.
 
-1. Push this repository to GitHub.
-2. In **[Render](https://render.com)** or **[Railway](https://railway.app)**:
-   - Create a new **Web Service**.
-   - Build Command: `pip install -r requirements.txt`
-   - Start Command: `python main.py`
-3. Add any optional environment variables (`TAVILY_API_KEY`, `OPENAI_API_KEY`, `OLLAMA_URL`).
+### 🎙️ Real-Time Voice Interaction (STT & TTS)
+- **Live Interim Speech Transcription**: Transcribes words on-screen in real time as you speak with zero silence delays.
+- **Natural Male American Voice Output**: Custom-filtered Web Speech Synthesis with natural pauses and clean markdown stripping.
+- **Hands-Free Hotkeys**: Tap `Spacebar` to toggle voice listening, `Esc` to halt speech, and `Enter` to send.
 
-### Option B: Docker Container Deployment
+### 🕒 Local Search History & Privacy Management
+- **Local SQLite Persistence**: Stores every search and command with timestamps in `memory.db`.
+- **Browser Mirroring**: Backed by `localStorage` for instant offline and cold-boot recovery.
+- **HUD History Modal**:
+  - Click **`🕒 HISTORY`** in the top navigation bar to inspect past queries.
+  - **Click-to-Load**: Tap any query to instantly insert or re-run it.
+  - **Individual Deletion**: Remove any entry with the **🗑** button.
+  - **Wipe All**: Clear complete local search logs with one click.
 
-Build and run the production container:
+### 🔮 Futuristic Holographic HUD Interface
+- Central animated **AI Core Orb** with concentric spinning telemetry rings and particle mesh background.
+- Dynamic visual feedback states: `READY` (Cyan), `LISTENING` (Neon Blue pulse), `THINKING` (Amber spin), `SPEAKING` (Audio waveform pulse), and `ERROR` (Red alert).
+- Integrated markdown renderer with syntax highlighting, lists, and collapsible conversation stream drawer.
+- Spacious, clean bottom status bar and input dock.
+
+### 🛠️ Built-in Safe Tools & Long-Term Memory
+- **🧮 Fast Math Engine**: Evaluates calculations, percentages, and conversions locally in `0ms` using safe AST parsing.
+- **🔒 Guarded Shell Runner**: Safe command execution with automatic confirmation alerts for destructive operations (`rm`, `del`, `format`, `shutdown`).
+- **📁 Workspace Files**: Read, create, and list project files safely restricted within the workspace.
+- **📊 System Diagnostics**: Reports live CPU, RAM, and operating system metrics.
+- **🧠 SQLite Preferences**: Remembers user preferences (`name`, `preferred_language`, custom notes).
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Python 3.10 or higher
+- A Google Gemini API Key ([Get one free from Google AI Studio](https://aistudio.google.com/))
+
+### 1. Clone the Repository
 ```bash
-docker build -t jarvis-assistant .
-docker run -d -p 8000:8000 --name jarvis jarvis-assistant
+git clone https://github.com/stutitiwari23/J.A.R.V.I.S.git
+cd J.A.R.V.I.S
 ```
 
-Or using `docker-compose`:
+### 2. Set Up Virtual Environment & Dependencies
 ```bash
-docker-compose up -d
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# Windows (PowerShell):
+.\venv\Scripts\Activate.ps1
+# macOS/Linux:
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
 ```
+
+### 3. Configure Environment Variables
+Copy the sample environment file:
+```bash
+cp .env.example .env
+```
+Open `.env` and add your Gemini API key:
+```env
+GEMINI_API_KEY=your_actual_gemini_api_key_here
+GEMINI_MODEL=gemini-3.1-flash-lite
+```
+
+### 4. Launch Jarvis
+```bash
+python main.py
+```
+Open your browser to **[http://127.0.0.1:8000](http://127.0.0.1:8000)** (Chrome or Edge recommended for optimal Web Speech support).
+
+> **CLI Mode**: To launch the interactive Terminal REPL instead of the web dashboard:
+> ```bash
+> python main.py --cli
+> ```
 
 ---
 
-## 📁 Clean Repository Structure
+## ☁️ Deployment
+
+### Deploy to Vercel (One-Click Serverless)
+
+Jarvis is pre-configured with [vercel.json](vercel.json) and [api/index.py](api/index.py) for direct Vercel deployment:
+
+1. Push your code to your GitHub repository.
+2. Go to **[vercel.com](https://vercel.com)** and click **"Add New..." → "Project"**.
+3. Import your **`J.A.R.V.I.S`** repository.
+4. Under **Settings → Environment Variables**, add:
+   - `GEMINI_API_KEY`: `your_gemini_api_key`
+   - `GEMINI_MODEL`: `gemini-3.1-flash-lite`
+5. Click **Deploy**.
+
+> *Note for Vercel*: On serverless platforms, SQLite database writes are automatically routed to `/tmp/memory.db`. Your search history is mirrored in browser `localStorage` to persist across sessions.
+
+### Deploy to Render / Railway / Docker
+- **Render**: Connect your repo to Render using the pre-configured [render.yaml](render.yaml).
+- **Docker**:
+  ```bash
+  docker build -t jarvis-assistant .
+  docker run -d -p 8000:8000 --env-file .env jarvis-assistant
+  ```
+- **Docker Compose**:
+  ```bash
+  docker-compose up -d
+  ```
+
+---
+
+## ⌨️ Keyboard Shortcuts
+
+| Shortcut | Action |
+| :--- | :--- |
+| `Space` | Toggle Voice Microphone (Click to speak / stop) |
+| `Enter` | Send message in prompt input |
+| `Esc` | Stop Jarvis from speaking / Cancel voice recognition |
+
+---
+
+## 📁 Project Structure
 
 ```text
-Jarvis/
+J.A.R.V.I.S/
+├── api/
+│   └── index.py             # Vercel serverless ASGI handler
 ├── backend/
-│   ├── main.py              # FastAPI server & Terminal CLI REPL
-│   ├── config.py            # YAML + .env loader
-│   ├── agent.py             # Single central Agent brain
-│   ├── ai.py                # AIClient (Ollama + OpenAI + offline fallback)
-│   ├── memory.py            # SQLite preferences & history storage
+│   ├── main.py              # FastAPI application & API endpoints
+│   ├── agent.py             # Central unified agent loop
+│   ├── ai.py                # Gemini AI brain & connection pooling
+│   ├── memory.py            # SQLite database & search history manager
+│   ├── config.py            # Configuration & environment loader
 │   ├── static/
-│   │   └── index.html       # Futuristic Animated Orb HUD Interface
+│   │   └── index.html       # Futuristic holographic HUD web interface
 │   ├── tools/
-│   │   ├── __init__.py      # Minimal Tool class & catalog
-│   │   ├── calculator.py    # Safe AST math parser
-│   │   ├── search.py        # Web search with fast timeout
-│   │   ├── files.py         # Workspace-restricted file operations
-│   │   ├── system.py        # CPU, RAM, OS diagnostic tool
-│   │   └── shell.py         # Safe shell runner with destructive gating
+│   │   ├── __init__.py      # Tool registry & catalog
+│   │   ├── calculator.py    # Safe AST-based math evaluation
+│   │   ├── search.py        # Web search integration
+│   │   ├── files.py         # Workspace safe file operations
+│   │   ├── shell.py         # Guarded command runner
+│   │   └── system.py        # System health & diagnostic metrics
 │   └── integrations/
-│       ├── gmail.py         # Gmail integration with confirmation
-│       └── calendar.py      # Google Calendar integration
+│       ├── gmail.py         # Email checks & message drafting
+│       └── calendar.py      # Calendar event queries
 │
-├── config.yaml              # Single user configuration
-├── .env.example             # Environment template
-├── Dockerfile               # Container deployment specification
-├── docker-compose.yml       # 1-command container orchestration
-├── Procfile                 # Cloud web process entrypoint
-├── render.yaml              # Render infrastructure-as-code
-├── requirements.txt         # Minimal dependencies
-├── main.py                  # Unified launcher entry point
-└── test_jarvis.py           # 25-test verification test suite
+├── config.yaml              # Assistant & tool settings
+├── .env.example             # Sample environment template
+├── requirements.txt         # Python package dependencies
+├── vercel.json              # Vercel deployment configuration
+├── render.yaml              # Render infrastructure specification
+├── Dockerfile               # Container build configuration
+├── docker-compose.yml       # Docker compose orchestration
+├── main.py                  # Main application entrypoint
+└── test_jarvis.py           # Automated test suite (25+ tests)
 ```
+
+---
+
+## 🧪 Testing & Verification
+
+Run the full automated test suite covering Gemini integration, safe tools, destructive gating, memory, and FastAPI endpoints:
+
+```bash
+python test_jarvis.py
+```
+
+---
+
+## 🛡️ Security & Privacy
+
+- **API Keys**: Never committed to version control (`.env` is excluded via `.gitignore`).
+- **Destructive Gating**: Commands such as `rm -rf`, `del`, `format`, or `shutdown` trigger an explicit confirmation prompt before execution.
+- **Directory Traversal Defense**: File operations are strictly restricted to the workspace boundary.
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
