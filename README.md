@@ -1,21 +1,3 @@
-# ✦ J.A.R.V.I.S — Futuristic Personal AI Assistant
-
-<div align="center">
-
-![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white)
-![Google Gemini](https://img.shields.io/badge/Google%20Gemini-3.1%20Flash%20Lite-8E75B2?style=for-the-badge&logo=google&logoColor=white)
-![Vercel](https://img.shields.io/badge/Vercel-Ready-000000?style=for-the-badge&logo=vercel&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
-
-**A high-performance, sci-fi HUD personal AI assistant powered by Google Gemini, real-time voice streaming, and local search history management.**
-
-[Key Features](#-key-features) • [Quick Start](#-quick-start) • [Vercel Deployment](#-vercel-deployment) • [Search History](#-local-search-history) • [Architecture](#-project-structure)
-
-</div>
-
----
-
 ## ⚡ Overview
 
 **J.A.R.V.I.S** (*Just A Rather Very Intelligent System*) is a personal AI assistant inspired by Tony Stark's iconic AI. It blends a futuristic holographic HUD interface with state-of-the-art **Google Gemini** generative intelligence, ultra-low latency response times, real-time Web Speech recognition, and complete local privacy controls.
