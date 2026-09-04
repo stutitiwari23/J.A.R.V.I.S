@@ -96,28 +96,9 @@ Open your browser to **[http://127.0.0.1:8000](http://127.0.0.1:8000)** (Chrome 
 
 ### Deploy to Vercel (One-Click Serverless)
 
-Jarvis is pre-configured with [vercel.json](vercel.json) and [api/index.py](api/index.py) for direct Vercel deployment:
+Jarvis is already deplyed on Vercel.
 
-1. Push your code to your GitHub repository.
-2. Go to **[vercel.com](https://vercel.com)** and click **"Add New..." → "Project"**.
-3. Import your **`J.A.R.V.I.S`** repository.
-4. Under **Settings → Environment Variables**, add:
-   - `GEMINI_API_KEY`: `your_gemini_api_key`
-   - `GEMINI_MODEL`: `gemini-3.1-flash-lite`
-5. Click **Deploy**.
-
-> *Note for Vercel*: On serverless platforms, SQLite database writes are automatically routed to `/tmp/memory.db`. Your search history is mirrored in browser `localStorage` to persist across sessions.
-
-### Deploy to Render / Railway / Docker
-- **Render**: Connect your repo to Render using the pre-configured [render.yaml](render.yaml).
-- **Docker**:
-  ```bash
-  docker build -t jarvis-assistant .
-  docker run -d -p 8000:8000 --env-file .env jarvis-assistant
-  ```
-- **Docker Compose**:
-  ```bash
-  docker-compose up -d
+Live Link- https://jarvis-livid-psi.vercel.app/
   ```
 
 ---
