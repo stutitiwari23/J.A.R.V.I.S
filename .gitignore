@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.env
+.venv/
+venv/
+.python/
+*.db
+memory.db
+node_modules/
+dist/
+.jarvis_memory/
+*.log
+.DS_Store

@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  jarvis:
+    build: .
+    container_name: jarvis-assistant
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+    volumes:
+      - ./memory.db:/app/memory.db
+      - ./.env:/app/.env
+    restart: unless-stopped

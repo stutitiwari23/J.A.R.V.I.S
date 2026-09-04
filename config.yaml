@@ -1,0 +1,25 @@
+assistant:
+  name: Jarvis
+
+model:
+  provider: gemini
+  name: gemini-3.1-flash-lite
+  temperature: 0.7
+
+
+tools:
+  calculator: true
+  web_search: true
+  files: true
+  shell: true
+
+integrations:
+  gmail: false
+  calendar: false
+
+memory:
+  enabled: true
+
+server:
+  host: "0.0.0.0"
+  port: 8000
