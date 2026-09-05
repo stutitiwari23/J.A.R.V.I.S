@@ -1449,7 +1449,7 @@
     }
 
     // ─── 4. Unified Agent Communication (Voice & Text) ────────────────
-    const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:8000' : '';
+    const API_BASE = '';
 
     async function sendMessage(text, isVoice = false, confirmed = false) {
       if (!text || !text.trim()) return;
@@ -1482,7 +1482,7 @@
           if (res.status === 401 || res.status === 403) {
             throw new Error("Gemini authentication failure. Please check your GEMINI_API_KEY in .env.");
           } else if (res.status === 404) {
-            throw new Error("API endpoint not found. Verify backend is running on http://127.0.0.1:8000.");
+            throw new Error("API endpoint not found. Verify backend server is running.");
           } else if (res.status === 400) {
             throw new Error("Bad request format sent to backend.");
           } else if (res.status >= 500) {
@@ -1518,7 +1518,7 @@
         let errMsg = "JARVIS is unable to connect to the AI service.";
         const msgStr = (err && err.message) ? err.message : "";
         if (msgStr.includes("Failed to fetch") || msgStr.includes("NetworkError")) {
-          errMsg = "Backend unavailable. Ensure the Jarvis server is running on http://127.0.0.1:8000.";
+          errMsg = "Backend unavailable. Ensure the Jarvis server is running.";
         } else if (msgStr.includes("authentication failure")) {
           errMsg = "Gemini authentication failure. Please check your GEMINI_API_KEY in .env.";
         } else if (msgStr.includes("Internal AI service error")) {
