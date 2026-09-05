@@ -1449,7 +1449,7 @@
     }
 
     // ─── 4. Unified Agent Communication (Voice & Text) ────────────────
-    const API_BASE = (window.location.protocol === 'file:' || !window.location.port) ? 'http://127.0.0.1:8000' : '';
+    const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:8000' : '';
 
     async function sendMessage(text, isVoice = false, confirmed = false) {
       if (!text || !text.trim()) return;
