@@ -143,8 +143,6 @@ J.A.R.V.I.S/
 ├── requirements.txt         # Python package dependencies
 ├── vercel.json              # Vercel deployment configuration
 ├── render.yaml              # Render infrastructure specification
-├── Dockerfile               # Container build configuration
-├── docker-compose.yml       # Docker compose orchestration
 ├── main.py                  # Main application entrypoint
 └── test_jarvis.py           # Automated test suite (25+ tests)
 ```

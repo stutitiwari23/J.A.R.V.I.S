@@ -3,7 +3,7 @@ assistant:
 
 model:
   provider: gemini
-  name: gemini-3.1-flash-lite
+  name: gemini-3.6-flash
   temperature: 0.7
 
 

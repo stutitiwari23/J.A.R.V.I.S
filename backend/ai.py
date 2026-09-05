@@ -46,7 +46,7 @@ class AIClient:
     """
     def __init__(self):
         self.model_cfg = config.get("model", {})
-        self.model_name = os.getenv("GEMINI_MODEL", self.model_cfg.get("name", "gemini-3.1-flash-lite"))
+        self.model_name = os.getenv("GEMINI_MODEL", self.model_cfg.get("name", "gemini-3.6-flash"))
         self.temperature = float(self.model_cfg.get("temperature", 0.7))
         self.api_key = os.getenv("GEMINI_API_KEY", "").strip()
         self._client = None
@@ -54,6 +54,9 @@ class AIClient:
 
     def get_client(self):
         """Lazy-load and cache the official Google GenAI client using GEMINI_API_KEY."""
+        from dotenv import load_dotenv
+        from pathlib import Path
+        load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
         api_key = os.getenv("GEMINI_API_KEY", self.api_key).strip()
         if not api_key or api_key.lower() in ["put_your_gemini_api_key_here", "your_gemini_api_key_here", "your_api_key_here", "none", ""]:
             return None
@@ -173,7 +176,7 @@ class AIClient:
     def _generate_with_fallback(self, client, model: str, contents, gen_config):
         """Call client.models.generate_content with fast fallback models if primary model is unavailable."""
         candidate_models = [model]
-        for fallback in ["gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-3.6-flash"]:
+        for fallback in ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]:
             if fallback not in candidate_models:
                 candidate_models.append(fallback)
 
@@ -184,7 +187,10 @@ class AIClient:
             except Exception as ex:
                 last_err = ex
                 err_msg = str(ex).lower()
-                if "not found" in err_msg or "does not exist" in err_msg or "unsupported" in err_msg:
+                # Do NOT swallow authentication or quota errors as model missing errors
+                if any(auth_term in err_msg for auth_term in ["401", "403", "unauthenticated", "permission", "api_key", "quota"]):
+                    raise ex
+                if any(term in err_msg for term in ["not found", "does not exist", "not available", "no longer available", "404"]):
                     print(f"[-] Model '{m}' unavailable, falling back to next available Gemini model...")
                     continue
                 raise ex
