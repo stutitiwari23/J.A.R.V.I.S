@@ -1,6 +1,19 @@
 import os
 import sys
 from pathlib import Path
+
+# Force UTF-8 stdout/stderr encoding on Windows to prevent UnicodeEncodeError
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -101,8 +114,11 @@ def chat(request: ChatRequest):
     if not request.message or not request.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
-    print("[API] Chat request received")
-    print(f"[API] Message: {request.message}")
+    try:
+        print("[API] Chat request received")
+        print(f"[API] Message: {request.message}")
+    except Exception:
+        pass
     # Record query in local search history
     memory.add_search(request.message)
     res = agent.handle_message(request.message, confirmed=request.confirmed)
@@ -110,7 +126,10 @@ def chat(request: ChatRequest):
         res["answer"] = res["response"]
     elif "response" not in res and "answer" in res:
         res["response"] = res["answer"]
-    print("[API] Response returned")
+    try:
+        print("[API] Response returned")
+    except Exception:
+        pass
     return res
 
 @app.get("/api/history")

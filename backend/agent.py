@@ -45,13 +45,19 @@ class Agent:
         if not user_message:
             return {"response": "Please enter a message.", "tool_executed": None, "tool_output": None}
 
-        print(f"[+] Received message: '{user_message}'")
+        try:
+            print(f"[+] Received message: '{user_message}'")
+        except Exception:
+            pass
 
         # 1. Special Greeting Behavior (Case-insensitive)
         clean_greet = re.sub(r'[^a-zA-Z\s]', '', user_message.lower()).strip()
-        if clean_greet in ["hey jarvis", "hello jarvis", "hi jarvis", "jarvis", "hey jarvis how are you", "hi jarvis how are you"]:
+        if clean_greet in ["hello", "hi", "hey", "hey jarvis", "hello jarvis", "hi jarvis", "jarvis", "hey jarvis how are you", "hi jarvis how are you"]:
             greeting_resp = "Hello ma'am, how can I help you?"
-            print(f"[+] Greeting triggered: '{greeting_resp}'")
+            try:
+                print(f"[+] Greeting triggered: '{greeting_resp}'")
+            except Exception:
+                pass
             memory.add_history("user", user_message)
             memory.add_history("assistant", greeting_resp)
             return {"response": greeting_resp, "tool_executed": None, "tool_output": None}

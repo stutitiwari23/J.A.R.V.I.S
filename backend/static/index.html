@@ -403,6 +403,8 @@
       align-items: center;
       gap: 0.4rem;
       transition: all 0.2s;
+      flex-shrink: 0;
+      white-space: nowrap;
     }
     .dock-btn.mic {
       background: rgba(0, 242, 254, 0.15);
@@ -826,7 +828,15 @@
       50% { opacity: 0.5; }
     }
 
-    /* Mobile Responsive */
+    /* Responsive Desktop Drawer Layout & Mobile */
+    @media (min-width: 901px) {
+      body {
+        transition: padding-right 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      body.drawer-open {
+        padding-right: 400px;
+      }
+    }
     @media (max-width: 640px) {
       .hud-telemetry { display: none; }
       .orb-stage { width: 250px; height: 250px; }
@@ -892,8 +902,8 @@
 
     <!-- State & Transcription Feedback -->
     <div class="status-display">
-      <div class="status-label" id="statusLabel">READY</div>
-      <div class="status-sub" id="statusSub">"How can I assist you, ma'am?"</div>
+      <div class="status-label" id="statusLabel">JARVIS ONLINE</div>
+      <div class="status-sub" id="statusSub">Say "Hey JARVIS" or click to speak</div>
     </div>
 
     <!-- Central Voice Call-to-Action -->
@@ -949,7 +959,7 @@
     <div class="drawer-content" id="drawerContent">
       <div class="chat-bubble assistant">
         <div class="bubble-role">JARVIS</div>
-        <div>Good day. I am J.A.R.V.I.S, your personal AI assistant. All subsystems are online and standing by.</div>
+        <div id="initialGreetingBubble">JARVIS is online and ready. How can I assist?</div>
       </div>
     </div>
   </aside>
@@ -1653,13 +1663,22 @@
       return `${timeStr}. JARVIS is online and ready. How can I assist?`;
     }
 
+    function updateGreetingDisplay() {
+      const greeting = getStartupGreetingText();
+      const bubble = document.getElementById('initialGreetingBubble');
+      if (bubble) bubble.textContent = greeting;
+      const statusSub = document.getElementById('statusSub');
+      if (statusSub && (currentState === 'IDLE' || currentState === 'READY')) {
+        statusSub.textContent = `"${greeting}"`;
+      }
+    }
+
     function playStartupGreeting() {
       if (hasPlayedStartupGreeting) return;
       hasPlayedStartupGreeting = true;
       const greeting = getStartupGreetingText();
       
-      const statusSub = document.getElementById('statusSub');
-      if (statusSub) statusSub.textContent = `"${greeting}"`;
+      updateGreetingDisplay();
       setOrbState('READY', `"${greeting}"`);
 
       if (speechSynth) {
@@ -1962,10 +1981,14 @@
 
     // ─── 5. UI Controls & Modals ──────────────────────────────────────
     function toggleChatDrawer() {
-      document.getElementById('chatDrawer').classList.toggle('open');
+      const drawer = document.getElementById('chatDrawer');
+      drawer.classList.toggle('open');
+      document.body.classList.toggle('drawer-open', drawer.classList.contains('open'));
     }
     function openChatDrawer() {
-      document.getElementById('chatDrawer').classList.add('open');
+      const drawer = document.getElementById('chatDrawer');
+      drawer.classList.add('open');
+      document.body.classList.add('drawer-open');
     }
     function toggleSettingsModal() {
       document.getElementById('settingsModal').classList.toggle('open');
@@ -2171,6 +2194,7 @@
 
     // Initialize systems on DOM Ready
     document.addEventListener('DOMContentLoaded', () => {
+      updateGreetingDisplay();
       initSpeech();
       loadVoices();
       initCanvas();
