@@ -2,8 +2,8 @@ assistant:
   name: Jarvis
 
 model:
-  provider: gemini
-  name: gemini-3.6-flash
+  provider: groq
+  name: openai/gpt-oss-120b
   temperature: 0.7
 
 

@@ -38,7 +38,7 @@ class Agent:
         1. Check exact/approximate greeting triggers ("Hey Jarvis", "Hello Jarvis", etc.)
         2. Check explicit memory commands (e.g. 'remember that...')
         3. Build conversation context from recent session history
-        4. Send to Gemini brain (which executes search grounding / tools and synthesizes answer)
+        4. Send to Groq brain (which executes search grounding / tools and synthesizes answer)
         5. Store history and return structured result
         """
         user_message = user_message.strip()
@@ -133,15 +133,18 @@ class Agent:
         # Save user message to memory history
         memory.add_history("user", user_message)
 
-        # 5. Call Gemini Brain
-        print(f"[+] Calling Gemini Brain service...")
+        # 5. Call Groq Brain
+        print(f"[+] Calling Groq Brain service...")
         ai_res = self.ai.chat(messages, tools_map=self.tools_map, confirmed=confirmed)
 
         final_response = ai_res.get("content", "I am standing by, ma'am.")
         executed_tool = ai_res.get("tool_executed")
         tool_output = ai_res.get("tool_output")
 
-        print(f"[+] Returning response: '{final_response[:100]}...'")
+        try:
+            print(f"[+] Returning response: '{final_response[:100]}...'")
+        except UnicodeEncodeError:
+            print(f"[+] Returning response: '{final_response[:100].encode('ascii', errors='replace').decode('ascii')}...'")
 
         # Save assistant message to memory history
         memory.add_history("assistant", final_response)

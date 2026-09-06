@@ -1,16 +1,15 @@
 ## ⚡ Overview
 
-**J.A.R.V.I.S** (*Just A Rather Very Intelligent System*) is a personal AI assistant inspired by Tony Stark's iconic AI. It blends a futuristic holographic HUD interface with state-of-the-art **Google Gemini** generative intelligence, ultra-low latency response times, real-time Web Speech recognition, and complete local privacy controls.
+**J.A.R.V.I.S** (*Just A Rather Very Intelligent System*) is a personal AI assistant inspired by Tony Stark's iconic AI. It blends a futuristic holographic HUD interface with state-of-the-art **Groq** (`openai/gpt-oss-120b`) generative intelligence, ultra-low latency response times, real-time Web Speech recognition, and complete local privacy controls.
 
 ---
 
 ## 🌟 Key Features
 
-### 🧠 Ultra-Fast Google Gemini Brain
-- Powered by **`gemini-3.1-flash-lite`** for rapid token generation (~2.4s initial response time).
-- Intelligent fallback cascade across `gemini-flash-lite-latest`, `gemini-3.5-flash-lite`, and `gemini-3.6-flash`.
-- **Persistent Connection Pooling**: Caches the official `google-genai` client to eliminate repeated TLS handshake delays.
-- Dynamic Google Search grounding for live/current real-world information.
+### 🧠 Ultra-Fast Groq Brain
+- Powered by **`openai/gpt-oss-120b`** on Groq's high-speed inference engine.
+- Dynamic web search integration for live/current real-world information.
+- Resilient error handling for rate limits, authentication, and service availability.
 
 ### 🎙️ Real-Time Voice Interaction (STT & TTS)
 - **Live Interim Speech Transcription**: Transcribes words on-screen in real time as you speak with zero silence delays.
@@ -45,7 +44,7 @@
 
 ### Prerequisites
 - Python 3.10 or higher
-- A Google Gemini API Key ([Get one free from Google AI Studio](https://aistudio.google.com/))
+- A Groq API Key ([Get one free from Groq Console](https://console.groq.com/))
 
 ### 1. Clone the Repository
 ```bash
@@ -73,10 +72,10 @@ Copy the sample environment file:
 ```bash
 cp .env.example .env
 ```
-Open `.env` and add your Gemini API key:
+Open `.env` and add your Groq API key:
 ```env
-GEMINI_API_KEY=your_actual_gemini_api_key_here
-GEMINI_MODEL=gemini-3.1-flash-lite
+GROQ_API_KEY=your_actual_groq_api_key_here
+GROQ_MODEL=openai/gpt-oss-120b
 ```
 
 ### 4. Launch Jarvis
@@ -122,7 +121,7 @@ J.A.R.V.I.S/
 ├── backend/
 │   ├── main.py              # FastAPI application & API endpoints
 │   ├── agent.py             # Central unified agent loop
-│   ├── ai.py                # Gemini AI brain & connection pooling
+│   ├── ai.py                # Groq AI brain & connection handler
 │   ├── memory.py            # SQLite database & search history manager
 │   ├── config.py            # Configuration & environment loader
 │   ├── static/
@@ -141,7 +140,6 @@ J.A.R.V.I.S/
 ├── config.yaml              # Assistant & tool settings
 ├── .env.example             # Sample environment template
 ├── requirements.txt         # Python package dependencies
-├── vercel.json              # Vercel deployment configuration
 ├── render.yaml              # Render infrastructure specification
 ├── main.py                  # Main application entrypoint
 └── test_jarvis.py           # Automated test suite (25+ tests)
@@ -151,7 +149,7 @@ J.A.R.V.I.S/
 
 ## 🧪 Testing & Verification
 
-Run the full automated test suite covering Gemini integration, safe tools, destructive gating, memory, and FastAPI endpoints:
+Run the full automated test suite covering Groq integration, safe tools, destructive gating, memory, and FastAPI endpoints:
 
 ```bash
 python test_jarvis.py

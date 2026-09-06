@@ -1,8 +1,12 @@
 import os
 import json
 import logging
+import requests
+from pathlib import Path
+from dotenv import load_dotenv
 from backend.config import config
 from backend.tools import ALL_TOOLS
+from backend.tools.search import search_web
 
 logger = logging.getLogger("jarvis.ai")
 
@@ -41,37 +45,44 @@ def query_needs_search(text: str) -> bool:
 
 class AIClient:
     """
-    JARVIS AI Brain Service powered by Google's official Gemini API (google-genai).
-    Uses gemini-2.5-flash by default for maximum speed and intelligence.
+    JARVIS AI Brain Service powered by Groq API.
+    Uses openai/gpt-oss-120b by default for ultra-fast generation and intelligence.
     """
     def __init__(self):
         self.model_cfg = config.get("model", {})
-        self.model_name = os.getenv("GEMINI_MODEL", self.model_cfg.get("name", "gemini-3.6-flash"))
+        self.model_name = os.getenv("GROQ_MODEL", self.model_cfg.get("name", "openai/gpt-oss-120b"))
         self.temperature = float(self.model_cfg.get("temperature", 0.7))
-        self.api_key = os.getenv("GEMINI_API_KEY", "").strip()
-        self._client = None
+        self.api_key = os.getenv("GROQ_API_KEY", "").strip()
+        self._groq_client = None
         self._cached_key = None
 
-    def get_client(self):
-        """Lazy-load and cache the official Google GenAI client using GEMINI_API_KEY."""
-        from dotenv import load_dotenv
-        from pathlib import Path
+    def get_api_key(self) -> str:
+        """Fetch and reload GROQ_API_KEY from environment or .env file."""
         load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
-        api_key = os.getenv("GEMINI_API_KEY", self.api_key).strip()
-        if not api_key or api_key.lower() in ["put_your_gemini_api_key_here", "your_gemini_api_key_here", "your_api_key_here", "none", ""]:
+        key = os.getenv("GROQ_API_KEY", self.api_key).strip()
+        if not key or key.lower() in ["put_your_groq_api_key_here", "your_groq_api_key_here", "your_api_key_here", "none", ""]:
+            return ""
+        return key
+
+    def get_groq_client(self, api_key: str):
+        """Lazy-load and cache the Groq SDK client if installed."""
+        if not api_key:
             return None
-        if self._client is not None and self._cached_key == api_key:
-            return self._client
-        from google import genai
-        self._client = genai.Client(api_key=api_key)
-        self._cached_key = api_key
-        return self._client
+        if self._groq_client is not None and self._cached_key == api_key:
+            return self._groq_client
+        try:
+            from groq import Groq
+            self._groq_client = Groq(api_key=api_key, timeout=30.0)
+            self._cached_key = api_key
+            return self._groq_client
+        except (ImportError, Exception):
+            return None
 
     def chat(self, messages: list[dict], tools_map: dict | None = None, confirmed: bool = False) -> dict:
         """
-        Send conversation messages to Google Gemini, apply search grounding if needed,
-        and return the concise, professional JARVIS answer.
-        
+        Send conversation messages to Groq (openai/gpt-oss-120b),
+        apply web search grounding if needed, and return the concise JARVIS answer.
+
         Returns:
             {
                 "content": str,
@@ -79,11 +90,11 @@ class AIClient:
                 "tool_output": any | None
             }
         """
-        client = self.get_client()
-        model = os.getenv("GEMINI_MODEL", self.model_name)
+        api_key = self.get_api_key()
+        model = os.getenv("GROQ_MODEL", self.model_name)
 
-        # 1. If Gemini API Key is missing, provide offline tool fallback / clear diagnostic message
-        if not client:
+        # 1. If Groq API Key is missing, provide offline tool fallback / clear diagnostic message
+        if not api_key:
             return self._handle_missing_key(messages, tools_map, confirmed)
 
         # 2. Extract the last user message to check for search requirements
@@ -94,108 +105,236 @@ class AIClient:
                 break
 
         use_search = query_needs_search(last_user_message)
-        tool_executed = "google_search" if use_search else None
+        tool_executed = None
+        tool_output = None
 
-        from google.genai import types
-
-        # Build GenerateContentConfig
-        config_kwargs = {
-            "system_instruction": JARVIS_SYSTEM_INSTRUCTION,
-            "temperature": self.temperature,
-        }
-        if use_search:
-            config_kwargs["tools"] = [{"google_search": {}}]
-
-        gen_config = types.GenerateContentConfig(**config_kwargs)
-
-        # Convert conversation messages to Gemini types.Content objects
-        contents = []
+        # Build payload messages list
+        groq_messages = []
+        has_system = False
         for m in messages:
             role = m.get("role", "user")
             text = m.get("content", "").strip()
             if not text:
                 continue
-            gemini_role = "model" if role == "assistant" else "user"
-            contents.append(types.Content(role=gemini_role, parts=[types.Part.from_text(text=text)]))
+            if role == "system":
+                has_system = True
+                groq_messages.append({"role": "system", "content": text})
+            elif role == "assistant":
+                groq_messages.append({"role": "assistant", "content": text})
+            else:
+                groq_messages.append({"role": "user", "content": text})
 
-        if not contents:
-            contents = [types.Content(role="user", parts=[types.Part.from_text(text=last_user_message or "Hello")])]
+        if not has_system:
+            groq_messages.insert(0, {"role": "system", "content": JARVIS_SYSTEM_INSTRUCTION})
 
-        print("[AI] Calling Google Gemini")
-        print(f"[AI] Model: {model}")
-        print("[AI] Gemini request started")
+        # Apply web search integration if live information is required
+        if use_search and last_user_message:
+            tool_executed = "web_search"
+            try:
+                search_data = search_web(last_user_message)
+                tool_output = search_data
+                groq_messages.append({
+                    "role": "system",
+                    "content": f"[Live Web Search Context for '{last_user_message}']:\n{search_data}\n\nUse this information to answer accurately and concisely."
+                })
+            except Exception as e:
+                logger.warning(f"Web search lookup failed: {e}")
 
+        if not groq_messages:
+            groq_messages = [{"role": "user", "content": last_user_message or "Hello"}]
+
+        print(f"[AI] Calling Groq with model: {model}")
+        print("[AI] Groq request started")
+
+        # 3. Send request to Groq (using Groq SDK or REST API fallback)
+        groq_client = self.get_groq_client(api_key)
+        if groq_client:
+            return self._call_with_sdk(groq_client, model, groq_messages, last_user_message, tool_executed, tool_output)
+        else:
+            return self._call_with_rest(api_key, model, groq_messages, last_user_message, tool_executed, tool_output)
+
+    def _call_with_sdk(self, client, model: str, messages: list[dict], last_user_message: str, tool_executed: str | None, tool_output) -> dict:
+        """Execute request using the official Groq Python SDK."""
         try:
-            resp = self._generate_with_fallback(client, model, contents, gen_config)
-            print("[AI] Gemini response received")
-            
-            output_text = resp.text if hasattr(resp, "text") and resp.text else ""
-            if not output_text and hasattr(resp, "candidates") and resp.candidates:
-                for part in resp.candidates[0].content.parts:
-                    if hasattr(part, "text") and part.text:
-                        output_text += part.text
-
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=self.temperature
+            )
+            print("[AI] Groq response received")
+            output_text = response.choices[0].message.content or ""
             return {
                 "content": output_text.strip() if output_text else "I am standing by, ma'am.",
                 "tool_executed": tool_executed,
-                "tool_output": "Google Search Grounding applied" if use_search else None
+                "tool_output": tool_output
             }
-
         except Exception as e:
-            err_str = str(e)
-            print(f"[ERROR] Gemini request failed: {err_str[:120]}")
-            logger.error(f"Gemini API error: {err_str}", exc_info=True)
+            return self._handle_error(e, model, last_user_message)
 
-            # Check for authentication / permission error
-            if any(k in err_str.lower() for k in ["api_key", "invalid api key", "permission", "unauthenticated", "403", "401"]):
+    def _call_with_rest(self, api_key: str, model: str, messages: list[dict], last_user_message: str, tool_executed: str | None, tool_output) -> dict:
+        """Execute request using direct HTTP REST call to Groq's OpenAI-compatible completions API."""
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": self.temperature
+        }
+
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=30)
+            print("[AI] Groq response received")
+
+            if resp.status_code == 200:
+                data = resp.json()
+                choices = data.get("choices", [])
+                output_text = ""
+                if choices and "message" in choices[0]:
+                    output_text = choices[0]["message"].get("content", "")
                 return {
-                    "content": "Gemini authentication error. Please verify your GEMINI_API_KEY in .env.",
+                    "content": output_text.strip() if output_text else "I am standing by, ma'am.",
+                    "tool_executed": tool_executed,
+                    "tool_output": tool_output
+                }
+
+            # Parse error payload from Groq
+            error_msg = ""
+            error_code = ""
+            try:
+                err_json = resp.json().get("error", {})
+                error_msg = err_json.get("message", "")
+                error_code = str(err_json.get("code", ""))
+            except Exception:
+                error_msg = resp.text
+
+            # 401 Authentication Error
+            if resp.status_code == 401 or "invalid_api_key" in error_code.lower() or "unauthorized" in error_msg.lower():
+                return {
+                    "content": "Groq authentication error. Please verify your GROQ_API_KEY in .env.",
                     "tool_executed": None,
                     "tool_output": None
                 }
 
-            # Check for connection / network error
-            if any(k in err_str.lower() for k in ["connect", "network", "timeout", "connection", "unreachable", "dns"]):
-                # If it's a simple calculation, provide offline calculation answer
-                calc_result = self._check_offline_calc(last_user_message)
-                if calc_result:
-                    return {"content": calc_result, "tool_executed": "calculator", "tool_output": calc_result}
-
+            # 429 Rate Limit
+            if resp.status_code == 429 or "rate_limit" in error_code.lower() or "rate limit" in error_msg.lower():
                 return {
-                    "content": "JARVIS could not connect to Google Gemini service. Please check your internet connection.",
+                    "content": "Groq rate limit reached. Please try again shortly, ma'am.",
+                    "tool_executed": None,
+                    "tool_output": None
+                }
+
+            # Invalid / Unavailable Model (400 or 404)
+            if resp.status_code in [400, 404] and any(term in error_msg.lower() for term in ["model", "does not exist", "not found", "decommissioned"]):
+                return {
+                    "content": f"Invalid or unavailable Groq model '{model}'. Please verify your GROQ_MODEL in .env.",
+                    "tool_executed": None,
+                    "tool_output": None
+                }
+
+            # 500+ API Unavailable
+            if resp.status_code >= 500:
+                calc_res = self._check_offline_calc(last_user_message)
+                if calc_res:
+                    return {"content": calc_res, "tool_executed": "calculator", "tool_output": calc_res}
+                return {
+                    "content": "Groq service is currently unavailable. Please check your network connection and try again.",
                     "tool_executed": None,
                     "tool_output": None
                 }
 
             return {
-                "content": "JARVIS could not process your request with Gemini. Please try again.",
+                "content": "JARVIS could not process your request with Groq. Please try again.",
                 "tool_executed": None,
                 "tool_output": None
             }
 
-    def _generate_with_fallback(self, client, model: str, contents, gen_config):
-        """Call client.models.generate_content with fast fallback models if primary model is unavailable."""
-        candidate_models = [model]
-        for fallback in ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]:
-            if fallback not in candidate_models:
-                candidate_models.append(fallback)
+        except requests.exceptions.Timeout:
+            calc_res = self._check_offline_calc(last_user_message)
+            if calc_res:
+                return {"content": calc_res, "tool_executed": "calculator", "tool_output": calc_res}
+            return {
+                "content": "Groq request timed out. Please try again.",
+                "tool_executed": None,
+                "tool_output": None
+            }
 
-        last_err = None
-        for m in candidate_models:
-            try:
-                return client.models.generate_content(model=m, contents=contents, config=gen_config)
-            except Exception as ex:
-                last_err = ex
-                err_msg = str(ex).lower()
-                # Do NOT swallow authentication or quota errors as model missing errors
-                if any(auth_term in err_msg for auth_term in ["401", "403", "unauthenticated", "permission", "api_key", "quota"]):
-                    raise ex
-                if any(term in err_msg for term in ["not found", "does not exist", "not available", "no longer available", "404"]):
-                    print(f"[-] Model '{m}' unavailable, falling back to next available Gemini model...")
-                    continue
-                raise ex
+        except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as ex:
+            calc_res = self._check_offline_calc(last_user_message)
+            if calc_res:
+                return {"content": calc_res, "tool_executed": "calculator", "tool_output": calc_res}
+            return {
+                "content": "Groq service is currently unavailable. Please check your network connection and try again.",
+                "tool_executed": None,
+                "tool_output": None
+            }
 
-        raise last_err
+        except Exception as ex:
+            return self._handle_error(ex, model, last_user_message)
+
+    def _handle_error(self, ex: Exception, model: str, last_user_message: str) -> dict:
+        """Handle exceptions from Groq SDK or general calls."""
+        err_str = str(ex)
+        err_lower = err_str.lower()
+        err_type = type(ex).__name__.lower()
+
+        # Sanitize any accidental leakage
+        print(f"[ERROR] Groq request failed: {type(ex).__name__}")
+        logger.error(f"Groq API error: {err_str}", exc_info=True)
+
+        # 401 Authentication error
+        if any(k in err_lower for k in ["401", "authentication", "invalid_api_key", "unauthorized", "api key"]) or "authenticationerror" in err_type:
+            return {
+                "content": "Groq authentication error. Please verify your GROQ_API_KEY in .env.",
+                "tool_executed": None,
+                "tool_output": None
+            }
+
+        # 429 Rate limit
+        if any(k in err_lower for k in ["429", "rate limit", "ratelimit", "rate_limit_exceeded"]) or "ratelimiterror" in err_type:
+            return {
+                "content": "Groq rate limit reached. Please try again shortly, ma'am.",
+                "tool_executed": None,
+                "tool_output": None
+            }
+
+        # Timeout
+        if any(k in err_lower for k in ["timeout", "timed out"]) or "timeouterror" in err_type:
+            calc_res = self._check_offline_calc(last_user_message)
+            if calc_res:
+                return {"content": calc_res, "tool_executed": "calculator", "tool_output": calc_res}
+            return {
+                "content": "Groq request timed out. Please try again.",
+                "tool_executed": None,
+                "tool_output": None
+            }
+
+        # Invalid model
+        if any(k in err_lower for k in ["model_not_found", "model does not exist", "invalid model", "does not exist"]) or "notfounderror" in err_type:
+            return {
+                "content": f"Invalid or unavailable Groq model '{model}'. Please verify your GROQ_MODEL in .env.",
+                "tool_executed": None,
+                "tool_output": None
+            }
+
+        # Network / Unavailable
+        if any(k in err_lower for k in ["connection", "connect", "unreachable", "dns", "503", "502", "504"]) or "connectionerror" in err_type:
+            calc_res = self._check_offline_calc(last_user_message)
+            if calc_res:
+                return {"content": calc_res, "tool_executed": "calculator", "tool_output": calc_res}
+            return {
+                "content": "Groq service is currently unavailable. Please check your network connection and try again.",
+                "tool_executed": None,
+                "tool_output": None
+            }
+
+        return {
+            "content": "JARVIS could not process your request with Groq. Please try again.",
+            "tool_executed": None,
+            "tool_output": None
+        }
 
     def _check_offline_calc(self, query: str) -> str | None:
         """Check if query is a math or percentage calculation and calculate locally."""
@@ -213,7 +352,7 @@ class AIClient:
 
     def _handle_missing_key(self, messages: list[dict], tools_map: dict | None, confirmed: bool) -> dict:
         """
-        Graceful fallback handler when GEMINI_API_KEY is not configured.
+        Graceful fallback handler when GROQ_API_KEY is not configured.
         Supports automated tests and clear user-facing error message.
         """
         last_msg = ""
@@ -253,8 +392,8 @@ class AIClient:
         if query_needs_search(last_msg):
             return {
                 "content": f"Here is what I found regarding {last_msg}: Information retrieved successfully.",
-                "tool_executed": "google_search",
-                "tool_output": "Google Search Grounding simulated"
+                "tool_executed": "web_search",
+                "tool_output": "Web search simulated"
             }
 
         # Programming test queries
@@ -281,7 +420,7 @@ class AIClient:
             }
 
         return {
-            "content": "Gemini API key is not configured. Please set your GEMINI_API_KEY in the .env file.",
+            "content": "Groq API key is not configured. Please set your GROQ_API_KEY in the .env file.",
             "tool_executed": None,
             "tool_output": None
         }

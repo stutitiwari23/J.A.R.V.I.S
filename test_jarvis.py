@@ -1,6 +1,6 @@
 """
 Jarvis Complete Verification Test Suite
-Tests Google Gemini Integration, all tools, safety constraints, memory, and central agent loop.
+Tests Groq Integration (openai/gpt-oss-120b), all tools, safety constraints, memory, and central agent loop.
 """
 import sys
 import os
@@ -15,20 +15,24 @@ def sep(title):
 
 def check(label, condition, detail=""):
     status = "[PASS]" if condition else "[FAIL]"
-    print(f"  {status} {label}" + (f" -> {detail}" if detail else ""))
+    try:
+        print(f"  {status} {label}" + (f" -> {detail}" if detail else ""))
+    except UnicodeEncodeError:
+        safe_detail = detail.encode('ascii', errors='replace').decode('ascii')
+        print(f"  {status} {label} -> {safe_detail}")
     assert condition, f"Assertion failed: {label}"
 
 def run_tests():
-    sep("1. GOOGLE GEMINI CONFIGURATION")
+    sep("1. GROQ CONFIGURATION")
     from backend.config import config
     from backend.ai import AIClient
     
-    check("Config model provider is gemini", config.get("model", {}).get("provider") == "gemini")
-    check("Config model name is set", bool(config.get("model", {}).get("name")))
+    check("Config model provider is groq", config.get("model", {}).get("provider") == "groq")
+    check("Config model name is set to openai/gpt-oss-120b", "openai/gpt-oss-120b" in config.get("model", {}).get("name", ""))
 
     ai_client = AIClient()
     check("AIClient initializes properly", ai_client is not None)
-    check("AIClient model configured to gemini", "gemini" in ai_client.model_name)
+    check("AIClient model configured to openai/gpt-oss-120b", "openai/gpt-oss-120b" in ai_client.model_name)
 
     sep("2. CALCULATOR TOOL")
     from backend.tools.calculator import calculate
@@ -198,8 +202,8 @@ def run_tests():
     check("POST /api/chat returns 200", res_chat.status_code == 200)
     check("Chat calculation output is 25", "25" in res_chat.json().get("answer", ""))
 
-    sep("ALL JARVIS GOOGLE GEMINI INTEGRATION TESTS PASSED SUCCESSFULLY")
-    print("  JARVIS with Google Gemini brain is verified and ready.\n")
+    sep("ALL JARVIS GROQ INTEGRATION TESTS PASSED SUCCESSFULLY")
+    print("  JARVIS with Groq brain is verified and ready.\n")
 
 if __name__ == "__main__":
     run_tests()

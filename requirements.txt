@@ -7,5 +7,4 @@ requests>=2.31.0
 rich>=13.7.1
 prompt_toolkit>=3.0.43
 duckduckgo-search>=5.0.0
-google-genai>=1.0.0
-
+groq>=0.11.0

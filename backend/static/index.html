@@ -1006,9 +1006,16 @@
 
   <script>
     // ─── 1. State Management & Audio Setup ─────────────────────────────
-    let currentState = 'IDLE'; // IDLE, LISTENING, THINKING, SPEAKING, ERROR
+    let currentState = 'IDLE'; // IDLE, READY, LISTENING, THINKING, SEARCHING, SPEAKING, ERROR
+    let speechMode = 'WAKE_WORD'; // WAKE_WORD, COMMAND, INTERRUPT, OFF
     let recognition = null;
+    let recognitionActive = false;
+    let wakeWordActive = true;
     let isListening = false;
+    let conversationTimer = null;
+    let watchdogTimer = null;
+    let isConversationMode = false;
+    let hasPlayedStartupGreeting = false;
     let speechSynth = window.speechSynthesis;
     let voices = [];
     let selectedVoice = null;
@@ -1024,13 +1031,26 @@
 
     function setOrbState(state, message = "") {
       currentState = state;
-      orbStage.className = 'orb-stage state-' + state.toLowerCase();
+      const orbClass = (state === 'READY') ? 'idle' : ((state === 'SEARCHING') ? 'thinking' : state.toLowerCase());
+      orbStage.className = 'orb-stage state-' + orbClass;
       voiceCtaBtn.classList.remove('recording', 'speaking');
 
+      if (watchdogTimer) {
+        clearTimeout(watchdogTimer);
+        watchdogTimer = null;
+      }
+
       if (state === 'IDLE') {
+        statusLabel.textContent = 'JARVIS ONLINE';
+        statusLabel.style.color = '#38bdf8';
+        statusSub.textContent = message || 'Say "Hey JARVIS" or click to speak';
+        voiceBtnIcon.textContent = '🎙';
+        voiceBtnText.textContent = 'CLICK TO SPEAK';
+        dockMicBtn.classList.remove('active');
+      } else if (state === 'READY') {
         statusLabel.textContent = 'READY';
         statusLabel.style.color = '#38bdf8';
-        statusSub.textContent = message || `"How can I assist you, ma'am?"`;
+        statusSub.textContent = message || 'Ready for command';
         voiceBtnIcon.textContent = '🎙';
         voiceBtnText.textContent = 'CLICK TO SPEAK';
         dockMicBtn.classList.remove('active');
@@ -1042,13 +1062,49 @@
         voiceBtnText.textContent = 'LISTENING...';
         voiceCtaBtn.classList.add('recording');
         dockMicBtn.classList.add('active');
+
+        // Watchdog timeout: return to READY if listening is abandoned
+        watchdogTimer = setTimeout(() => {
+          if (currentState === 'LISTENING') {
+            console.log("[WATCHDOG] Listening timed out, resetting to READY");
+            setOrbState('READY', 'Ready for command');
+            setTimeout(() => {
+              if (currentState === 'READY') {
+                setOrbState('IDLE');
+                startWakeWordListening();
+              }
+            }, 1500);
+          }
+        }, 18000);
       } else if (state === 'THINKING') {
-        statusLabel.textContent = 'THINKING...';
+        statusLabel.textContent = 'PROCESSING...';
         statusLabel.style.color = '#c084fc';
         statusSub.textContent = message || 'Processing your request...';
         voiceBtnIcon.textContent = '⚡';
         voiceBtnText.textContent = 'PROCESSING...';
         dockMicBtn.classList.remove('active');
+
+        // Safety timeout so UI never permanently gets stuck
+        watchdogTimer = setTimeout(() => {
+          if (currentState === 'THINKING' || currentState === 'SEARCHING') {
+            console.log("[WATCHDOG] Processing timed out, returning to ERROR then READY");
+            setOrbState('ERROR', 'Processing timeout. Please try again.');
+            setTimeout(() => setOrbState('READY'), 4000);
+          }
+        }, 40000);
+      } else if (state === 'SEARCHING') {
+        statusLabel.textContent = 'SEARCHING WEB...';
+        statusLabel.style.color = '#f59e0b';
+        statusSub.textContent = message || 'Searching the live internet...';
+        voiceBtnIcon.textContent = '🌐';
+        voiceBtnText.textContent = 'SEARCHING...';
+        dockMicBtn.classList.remove('active');
+
+        watchdogTimer = setTimeout(() => {
+          if (currentState === 'SEARCHING') {
+            setOrbState('THINKING', 'Synthesizing search results...');
+          }
+        }, 20000);
       } else if (state === 'SPEAKING') {
         statusLabel.textContent = 'SPEAKING...';
         statusLabel.style.color = '#10b981';
@@ -1057,6 +1113,13 @@
         voiceBtnText.textContent = 'STOP';
         voiceCtaBtn.classList.add('speaking');
         dockMicBtn.classList.remove('active');
+
+        // Fallback watchdog if speech engine stalls
+        watchdogTimer = setTimeout(() => {
+          if (currentState === 'SPEAKING') {
+            stopSpeaking();
+          }
+        }, 60000);
       } else if (state === 'ERROR') {
         statusLabel.textContent = 'ERROR';
         statusLabel.style.color = '#f87171';
@@ -1064,6 +1127,7 @@
         voiceBtnIcon.textContent = '⚠️';
         voiceBtnText.textContent = 'TRY AGAIN';
         dockMicBtn.classList.remove('active');
+        setTimeout(() => { if (currentState === 'ERROR') setOrbState('READY'); }, 4000);
       }
     }
 
@@ -1079,82 +1143,251 @@
       if (speechSynth && (speechSynth.speaking || speechSynth.pending)) {
         speechSynth.cancel();
       }
-      setOrbState('IDLE');
+      clearTimeout(conversationTimer);
+      if (watchdogTimer) clearTimeout(watchdogTimer);
+      setOrbState('READY', 'Ready for command');
+      setTimeout(() => {
+        if (currentState === 'READY') {
+          setOrbState('IDLE');
+          startWakeWordListening();
+        }
+      }, 1500);
     }
 
-    // ─── 2. Web Speech Recognition (STT) ──────────────────────────────
+    // ─── 2. Web Speech Recognition (Wake Word, Commands & Interruption) ──
+    function safeStartRecognition() {
+      if (!recognition) initSpeech();
+      if (!recognition || recognitionActive) return;
+      try {
+        recognition.start();
+      } catch (err) {
+        // If already active or starting, silently ignore
+      }
+    }
+
+    function safeStopRecognition() {
+      if (recognition && recognitionActive) {
+        try {
+          recognition.stop();
+        } catch (e) {
+          try { recognition.abort(); } catch(err) {}
+        }
+      }
+    }
+
+    function startCommandListening() {
+      speechMode = 'COMMAND';
+      isListening = true;
+      safeStopRecognition();
+      setTimeout(() => {
+        safeStartRecognition();
+      }, 100);
+    }
+
+    function startWakeWordListening() {
+      if (currentState !== 'IDLE' && currentState !== 'READY') return;
+      speechMode = 'WAKE_WORD';
+      isListening = false;
+      safeStopRecognition();
+      setTimeout(() => {
+        if (currentState === 'IDLE' || currentState === 'READY') {
+          safeStartRecognition();
+        }
+      }, 150);
+    }
+
+    function speakWakeAcknowledgement() {
+      const ackText = "Yes. How can I help?";
+      setOrbState('SPEAKING', `"${ackText}"`);
+
+      if (!speechSynth) {
+        setOrbState('LISTENING', 'Listening to your command...');
+        startCommandListening();
+        return;
+      }
+
+      speechSynth.cancel();
+      const utt = new SpeechSynthesisUtterance(ackText);
+      if (selectedVoice) utt.voice = selectedVoice;
+      utt.rate = parseFloat(document.getElementById('speechRateRange')?.value || 1.0);
+      utt.pitch = 0.95;
+
+      utt.onend = () => {
+        console.log("[WAKE] Acknowledgement finished, listening for command...");
+        setOrbState('LISTENING', 'Listening to your command...');
+        startCommandListening();
+      };
+
+      utt.onerror = () => {
+        setOrbState('LISTENING', 'Listening to your command...');
+        startCommandListening();
+      };
+
+      speechSynth.speak(utt);
+    }
+
     function initSpeech() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        recognition = new SpeechRecognition();
-        recognition.continuous = false;
-        recognition.interimResults = true;
-        recognition.lang = 'en-US';
+      if (!SpeechRecognition) {
+        const label = document.getElementById('voiceStatusLabel');
+        if (label) label.textContent = 'VOICE TYPING ONLY';
+        return;
+      }
+      if (recognition) return;
 
-        recognition.onstart = () => {
-          console.log("[VOICE] Listening...");
-          console.log("[VOICE] Listening started");
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        console.log(`[VOICE] Speech recognition active (${speechMode})`);
+        recognitionActive = true;
+        if (speechMode === 'COMMAND') {
           isListening = true;
           setOrbState('LISTENING', 'Listening to your voice...');
-        };
+        }
+      };
 
-        recognition.onresult = (e) => {
-          let interimTranscript = '';
-          let finalTranscript = '';
-          for (let i = e.resultIndex; i < e.results.length; i++) {
-            const part = e.results[i][0].transcript;
-            if (e.results[i].isFinal) {
-              finalTranscript += part;
+      recognition.onresult = (e) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const part = e.results[i][0].transcript;
+          if (e.results[i].isFinal) {
+            finalTranscript += part;
+          } else {
+            interimTranscript += part;
+          }
+        }
+
+        const combined = (finalTranscript || interimTranscript).trim();
+        const lowerCombined = combined.toLowerCase();
+        if (!combined) return;
+
+        // 1. VOICE INTERRUPTION (While JARVIS is speaking)
+        if (currentState === 'SPEAKING' || (speechSynth && speechSynth.speaking)) {
+          const isInterrupt = /\b(stop|cancel|wait|halt|shut\s*up|be\s*quiet)\b/i.test(lowerCombined);
+          if (isInterrupt) {
+            console.log("[INTERRUPT] Interrupted by voice command:", combined);
+            stopSpeaking();
+            setOrbState('LISTENING', 'Speech stopped. Listening to you...');
+            startCommandListening();
+            return;
+          }
+        }
+
+        // 2. WAKE WORD DETECTION ("Hey JARVIS" / "Hey Jarvis")
+        if (speechMode === 'WAKE_WORD' || currentState === 'IDLE' || currentState === 'READY') {
+          const wakeMatch = lowerCombined.match(/\b(?:hey\s+jarvis|ok\s+jarvis|hi\s+jarvis|jarvis)\b/i);
+          if (wakeMatch) {
+            console.log("[WAKE WORD] Wake phrase recognized:", wakeMatch[0]);
+            clearTimeout(conversationTimer);
+            isConversationMode = false;
+
+            // Check if user spoke the command in the same breath
+            const afterWake = combined.slice(wakeMatch.index + wakeMatch[0].length).replace(/^[,.\s]+/, '').trim();
+            safeStopRecognition();
+
+            if (afterWake.length > 2) {
+              console.log("[WAKE WORD] Query attached directly:", afterWake);
+              sendMessage(afterWake, true);
             } else {
-              interimTranscript += part;
+              speakWakeAcknowledgement();
             }
+            return;
           }
+        }
 
-          const currentText = (finalTranscript || interimTranscript).trim();
-          if (currentText) {
-            const inputField = document.getElementById('textInput');
-            if (inputField) inputField.value = currentText;
-            const statusSub = document.getElementById('statusSub');
-            if (statusSub) statusSub.textContent = `"${currentText}..."`;
-          }
+        // 3. ACTIVE COMMAND LISTENING (COMMAND mode or LISTENING state)
+        if (speechMode === 'COMMAND' || currentState === 'LISTENING') {
+          const inputField = document.getElementById('textInput');
+          if (inputField) inputField.value = combined;
+          const statusSub = document.getElementById('statusSub');
+          if (statusSub) statusSub.textContent = `"${combined}..."`;
 
           if (finalTranscript.trim()) {
-            isListening = false;
             const textToSubmit = finalTranscript.trim();
-            console.log(`[VOICE] Final transcript: ${textToSubmit}`);
-            console.log("[VOICE] Transcript received: " + textToSubmit);
-            try { recognition.stop(); } catch(err) {}
+            console.log(`[VOICE] Final command received: ${textToSubmit}`);
+
+            // If user said lone "stop" or "cancel"
+            if (/^(stop|cancel|wait)$/i.test(textToSubmit)) {
+              stopSpeaking();
+              setOrbState('READY', 'Ready for command');
+              setTimeout(() => {
+                if (currentState === 'READY') {
+                  setOrbState('IDLE');
+                  startWakeWordListening();
+                }
+              }, 1500);
+              return;
+            }
+
+            clearTimeout(conversationTimer);
+            safeStopRecognition();
             sendMessage(textToSubmit, true);
           }
-        };
+        }
+      };
 
-        recognition.onerror = (e) => {
-          isListening = false;
-          console.error("[VOICE] Speech recognition error:", e.error);
-          let errMsg = "Voice recognition error.";
-          if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-            errMsg = "Microphone access is required for voice interaction.";
-          } else if (e.error === 'no-speech') {
-            errMsg = "I didn't hear anything. Please try again.";
-          } else if (e.error === 'audio-capture') {
-            errMsg = "No microphone was found on this device.";
-          } else if (e.error === 'network') {
-            errMsg = "JARVIS is unable to connect to the AI service.";
-          }
-          setOrbState('ERROR', errMsg);
-          setTimeout(() => { if (currentState === 'ERROR') setOrbState('IDLE'); }, 4000);
-        };
+      recognition.onerror = (e) => {
+        console.error("[VOICE] Recognition error:", e.error);
+        recognitionActive = false;
 
-        recognition.onend = () => {
-          console.log("[VOICE] Listening ended");
-          isListening = false;
-          if (currentState === 'LISTENING') {
-            setOrbState('IDLE');
+        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+          wakeWordActive = false;
+          setOrbState('ERROR', 'Microphone access required.');
+          return;
+        }
+
+        if (e.error === 'no-speech') {
+          if (speechMode === 'COMMAND' && !isConversationMode) {
+            setOrbState('READY', 'Ready for command');
+            setTimeout(() => {
+              if (currentState === 'READY') {
+                setOrbState('IDLE');
+                startWakeWordListening();
+              }
+            }, 1500);
           }
-        };
-      } else {
-        document.getElementById('voiceStatusLabel').textContent = 'VOICE TYPING ONLY';
-      }
+          return;
+        }
+
+        if (currentState === 'LISTENING') {
+          setOrbState('READY', 'Ready for command');
+          setTimeout(() => {
+            if (currentState === 'READY') {
+              setOrbState('IDLE');
+              startWakeWordListening();
+            }
+          }, 1500);
+        }
+      };
+
+      recognition.onend = () => {
+        recognitionActive = false;
+        console.log(`[VOICE] Recognition ended (mode: ${speechMode}, state: ${currentState})`);
+
+        if (wakeWordActive && (currentState === 'IDLE' || currentState === 'READY') && speechMode === 'WAKE_WORD') {
+          setTimeout(() => {
+            if ((currentState === 'IDLE' || currentState === 'READY') && speechMode === 'WAKE_WORD') {
+              safeStartRecognition();
+            }
+          }, 400);
+        } else if (speechMode === 'COMMAND' && currentState === 'LISTENING') {
+          setTimeout(() => {
+            if (currentState === 'LISTENING') {
+              safeStartRecognition();
+            }
+          }, 200);
+        } else if (currentState === 'SPEAKING' && speechMode === 'INTERRUPT') {
+          setTimeout(() => {
+            if (currentState === 'SPEAKING') {
+              safeStartRecognition();
+            }
+          }, 200);
+        }
+      };
     }
 
     function triggerVoiceInput() {
@@ -1168,28 +1401,25 @@
       }
 
       if (!recognition) {
-        setOrbState('ERROR', "Microphone access is required for voice interaction.");
-        setTimeout(() => setOrbState('IDLE'), 4000);
+        setOrbState('ERROR', "Microphone access required.");
+        setTimeout(() => setOrbState('READY'), 4000);
         return;
       }
 
-      if (isListening) {
-        try { recognition.stop(); } catch(e) {}
-        isListening = false;
-        setOrbState('IDLE');
+      if (currentState === 'LISTENING') {
+        safeStopRecognition();
+        clearTimeout(conversationTimer);
+        setOrbState('READY', 'Ready for command');
+        setTimeout(() => {
+          if (currentState === 'READY') {
+            setOrbState('IDLE');
+            startWakeWordListening();
+          }
+        }, 1500);
       } else {
-        try {
-          console.log("[VOICE] Starting recognition...");
-          recognition.start();
-        } catch (err) {
-          console.warn("[VOICE] Recognition start error, resetting:", err);
-          try { recognition.abort(); } catch(e) {}
-          setTimeout(() => {
-            try { recognition.start(); } catch(e) {
-              console.error("[VOICE] Failed to start recognition:", e);
-            }
-          }, 150);
-        }
+        clearTimeout(conversationTimer);
+        setOrbState('LISTENING', 'Listening to your voice...');
+        startCommandListening();
       }
     }
 
@@ -1398,26 +1628,134 @@
       return finalHtml;
     }
 
+    const SEARCH_KEYWORDS = [
+      "latest", "current", "today", "recent", "live", "news",
+      "price", "prices", "weather", "stock", "stocks", "who is the current",
+      "what happened today", "score", "scores", "version of"
+    ];
+
+    function queryNeedsSearch(text) {
+      if (!text) return false;
+      const t = text.toLowerCase();
+      return SEARCH_KEYWORDS.some(kw => t.includes(kw));
+    }
+
+    function getStartupGreetingText() {
+      const hour = new Date().getHours();
+      let timeStr = "Good evening";
+      if (hour >= 5 && hour < 12) {
+        timeStr = "Good morning";
+      } else if (hour >= 12 && hour < 17) {
+        timeStr = "Good afternoon";
+      } else {
+        timeStr = "Good evening";
+      }
+      return `${timeStr}. JARVIS is online and ready. How can I assist?`;
+    }
+
+    function playStartupGreeting() {
+      if (hasPlayedStartupGreeting) return;
+      hasPlayedStartupGreeting = true;
+      const greeting = getStartupGreetingText();
+      
+      const statusSub = document.getElementById('statusSub');
+      if (statusSub) statusSub.textContent = `"${greeting}"`;
+      setOrbState('READY', `"${greeting}"`);
+
+      if (speechSynth) {
+        try {
+          speechSynth.cancel();
+          const utt = new SpeechSynthesisUtterance(greeting);
+          if (selectedVoice) utt.voice = selectedVoice;
+          utt.rate = parseFloat(document.getElementById('speechRateRange')?.value || 1.0);
+          utt.volume = parseFloat(document.getElementById('speechVolumeRange')?.value || 1.0);
+          utt.pitch = 0.95;
+
+          utt.onstart = () => {
+            setOrbState('SPEAKING', `"${greeting}"`);
+          };
+
+          utt.onend = () => {
+            setOrbState('READY', 'Ready for command');
+            setTimeout(() => {
+              if (currentState === 'READY') {
+                setOrbState('IDLE');
+                startWakeWordListening();
+              }
+            }, 1500);
+          };
+
+          utt.onerror = () => {
+            setOrbState('READY', 'Ready for command');
+            setTimeout(() => {
+              if (currentState === 'READY') {
+                setOrbState('IDLE');
+                startWakeWordListening();
+              }
+            }, 1000);
+          };
+
+          speechSynth.speak(utt);
+        } catch(e) {
+          setOrbState('IDLE');
+          startWakeWordListening();
+        }
+      } else {
+        setOrbState('IDLE');
+        startWakeWordListening();
+      }
+    }
+
     function speakText(text, isVoiceTriggered = false) {
       const voiceOutputToggle = document.getElementById('voiceOutputToggle');
       const voiceEnabled = voiceOutputToggle ? voiceOutputToggle.checked : true;
 
-      // Speak if voice mode was used OR if voice output toggle is ON
+      const onSpeechFinished = () => {
+        if (isVoiceTriggered) {
+          // ENTER SHORT CONVERSATION MODE (8-10 seconds inactivity window)
+          console.log("[CONVERSATION] Entering 9s follow-up conversation mode...");
+          isConversationMode = true;
+          setOrbState('LISTENING', 'Listening for follow-up...');
+          startCommandListening();
+
+          clearTimeout(conversationTimer);
+          conversationTimer = setTimeout(() => {
+            console.log("[CONVERSATION] 9s window expired. Returning to READY/IDLE.");
+            isConversationMode = false;
+            safeStopRecognition();
+            setOrbState('READY', 'Ready for command');
+            setTimeout(() => {
+              if (currentState === 'READY') {
+                setOrbState('IDLE');
+                startWakeWordListening();
+              }
+            }, 2000);
+          }, 9000); // 9 seconds
+        } else {
+          setOrbState('READY', 'Ready for command');
+          setTimeout(() => {
+            if (currentState === 'READY') {
+              setOrbState('IDLE');
+              startWakeWordListening();
+            }
+          }, 2000);
+        }
+      };
+
       if (!voiceEnabled && !isVoiceTriggered) {
-        setOrbState('IDLE');
+        onSpeechFinished();
         return;
       }
 
       if (!speechSynth) {
-        setOrbState('IDLE');
+        onSpeechFinished();
         return;
       }
 
       speechSynth.cancel();
-
       const spoken = cleanSpokenText(text);
       if (!spoken) {
-        setOrbState('IDLE');
+        onSpeechFinished();
         return;
       }
 
@@ -1432,17 +1770,19 @@
       const shortSnippet = spoken.length > 80 ? spoken.substring(0, 80) + '...' : spoken;
 
       utterance.onstart = () => {
-        console.log("[TTS] Starting speech");
-        console.log("[TTS] Speaking response");
+        console.log("[TTS] Speaking response...");
         setOrbState('SPEAKING', `"${shortSnippet}"`);
+        // Listen for voice interruption ("Stop", "Cancel") while speaking
+        speechMode = 'INTERRUPT';
+        safeStartRecognition();
       };
 
       utterance.onend = () => {
-        setOrbState('IDLE', `"${shortSnippet}"`);
+        onSpeechFinished();
       };
 
       utterance.onerror = () => {
-        setOrbState('IDLE');
+        onSpeechFinished();
       };
 
       speechSynth.speak(utterance);
@@ -1458,6 +1798,8 @@
       console.log("[CHAT] Sending message...");
       console.log(`[CHAT] Message: ${text}`);
 
+      clearTimeout(conversationTimer);
+
       if (!confirmed) {
         appendDrawerMessage('user', text);
         recordSearchLocally(text);
@@ -1468,8 +1810,20 @@
       const inputField = document.getElementById('textInput');
       if (inputField) inputField.value = '';
 
-      // Update state to THINKING and display what was heard/typed
+      // Check if search is required
+      const isSearchQuery = queryNeedsSearch(text);
+
+      // Transition to THINKING ("PROCESSING...")
       setOrbState('THINKING', `"${text}"`);
+
+      let searchVisualTimer = null;
+      if (isSearchQuery) {
+        searchVisualTimer = setTimeout(() => {
+          if (currentState === 'THINKING') {
+            setOrbState('SEARCHING', 'Searching the web for latest information...');
+          }
+        }, 350);
+      }
 
       try {
         const res = await fetch(`${API_BASE}/api/chat`, {
@@ -1477,10 +1831,12 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: text, confirmed })
         });
+
+        if (searchVisualTimer) clearTimeout(searchVisualTimer);
         
         if (!res.ok) {
           if (res.status === 401 || res.status === 403) {
-            throw new Error("Gemini authentication failure. Please check your GEMINI_API_KEY in .env.");
+            throw new Error("Groq authentication failure. Please check your GROQ_API_KEY in .env.");
           } else if (res.status === 404) {
             throw new Error("API endpoint not found. Verify backend server is running.");
           } else if (res.status === 400) {
@@ -1496,9 +1852,15 @@
 
         const reply = data.response || data.answer || data.content || '';
 
+        // If search was executed, transition back to THINKING briefly before speaking
+        if (isSearchQuery || data.tool_executed === 'web_search') {
+          setOrbState('THINKING', 'Synthesizing search results...');
+          await new Promise(r => setTimeout(r, 400));
+        }
+
         if (reply && reply.includes('CONFIRMATION_REQUIRED:')) {
           appendDrawerConfirmation(reply, text);
-          setOrbState('IDLE', 'Confirmation required for destructive action.');
+          setOrbState('READY', 'Confirmation required for destructive action.');
           if (isVoice) speakText("Confirmation is required for this operation. Please confirm on screen.", true);
         } else {
           appendDrawerMessage('assistant', reply, data.tool_executed);
@@ -1514,13 +1876,14 @@
           speakText(reply, isVoice);
         }
       } catch (err) {
+        if (searchVisualTimer) clearTimeout(searchVisualTimer);
         console.error("[ERROR] Chat request failed:", err);
         let errMsg = "JARVIS is unable to connect to the AI service.";
         const msgStr = (err && err.message) ? err.message : "";
         if (msgStr.includes("Failed to fetch") || msgStr.includes("NetworkError")) {
           errMsg = "Backend unavailable. Ensure the Jarvis server is running.";
         } else if (msgStr.includes("authentication failure")) {
-          errMsg = "Gemini authentication failure. Please check your GEMINI_API_KEY in .env.";
+          errMsg = "Groq authentication failure. Please check your GROQ_API_KEY in .env.";
         } else if (msgStr.includes("Internal AI service error")) {
           errMsg = "JARVIS could not process your request. Please try again.";
         } else if (msgStr) {
@@ -1529,7 +1892,7 @@
         setOrbState('ERROR', errMsg);
         appendDrawerMessage('assistant', errMsg);
         openChatDrawer();
-        setTimeout(() => { if (currentState === 'ERROR') setOrbState('IDLE'); }, 5000);
+        setTimeout(() => { if (currentState === 'ERROR') setOrbState('READY'); }, 4000);
       }
     }
 
@@ -1812,7 +2175,11 @@
       loadVoices();
       initCanvas();
       loadSearchHistory();
-      setOrbState('IDLE');
+
+      // Play startup greeting
+      setTimeout(() => {
+        playStartupGreeting();
+      }, 350);
 
       // Bind Enter key listener to textInput
       const textInput = document.getElementById('textInput');
@@ -1825,6 +2192,16 @@
         });
       }
     });
+
+    // Gesture fallback for browsers that block audio playback before first interaction
+    window.addEventListener('click', () => {
+      if (!hasPlayedStartupGreeting) {
+        playStartupGreeting();
+      }
+      if (!recognitionActive && (currentState === 'IDLE' || currentState === 'READY')) {
+        startWakeWordListening();
+      }
+    }, { once: true });
   </script>
 </body>
 </html>
